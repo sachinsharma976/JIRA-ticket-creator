@@ -4,11 +4,13 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // status is a plain String ("PENDING" | "CREATED" | "FAILED"), validated in
-// TypeScript — SQLite has no native enum support.
+// TypeScript. Postgres supports real enums, but this was carried over
+// unchanged from an earlier SQLite version — fine to switch to a native
+// enum later, not required for correctness today.
 model Ticket {
   id                String   @id @default(cuid())
   status            String   @default("PENDING")

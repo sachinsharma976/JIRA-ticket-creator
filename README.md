@@ -5,7 +5,7 @@ Paste context about a task, get an AI-drafted Jira ticket (title, description, a
 ## Stack
 
 - Next.js 16 (App Router, TypeScript), Tailwind CSS, shadcn/ui
-- Prisma 7 + SQLite (file-based, no external DB needed)
+- Prisma 7 + Postgres (e.g. Vercel Postgres / Neon) — chosen over SQLite because serverless hosts like Vercel don't have a persistent filesystem, which SQLite needs
 - Google Gemini (`gemini-flash-lite-latest`, free tier) for ticket drafting
 - Jira Cloud REST + Agile APIs for ticket creation
 
@@ -33,15 +33,19 @@ Create one at https://aistudio.google.com/apikey — no billing required for the
 cp .env.example .env
 ```
 
-Fill in `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`, `JIRA_BOARD_ID`, `GEMINI_API_KEY`. `JIRA_DEFAULT_ISSUE_TYPE` and the issue types offered in the UI (Task/Story/Bug) must exactly match issue type names configured on your Jira project — check your project's issue type scheme if ticket creation fails with an unexpected-field error.
+Fill in `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`, `JIRA_BOARD_ID`, `GEMINI_API_KEY`, `DATABASE_URL`. `JIRA_DEFAULT_ISSUE_TYPE` and the issue types offered in the UI (Task/Story/Bug) must exactly match issue type names configured on your Jira project — check your project's issue type scheme if ticket creation fails with an unexpected-field error.
 
 ### 5. Set up the database
 
+Provision a Postgres database — the easiest options are [Vercel Postgres](https://vercel.com/docs/storage/vercel-postgres) (provision from your Vercel project's Storage tab; it auto-injects connection-string env vars) or [Neon](https://neon.tech) directly (free tier). Copy the **pooled** connection string (Vercel calls it `POSTGRES_PRISMA_URL`) into `DATABASE_URL` in `.env`.
+
+Then apply the schema:
+
 ```bash
-npx prisma migrate dev
+npx prisma migrate dev --name init
 ```
 
-This creates `dev.db` (SQLite) and applies the schema. Prisma Client is regenerated automatically; if you ever change `prisma/schema.prisma`, re-run `npx prisma generate`.
+Prisma Client is regenerated automatically on install (`postinstall` script) and by `migrate dev`; if you ever change `prisma/schema.prisma` without running a migrate command, re-run `npx prisma generate` manually.
 
 ### 6. Run it
 
@@ -66,9 +70,14 @@ Enforced server-side (`DAILY_TICKET_LIMIT` in `.env`, default 10) against **crea
 - **Acceptance criteria checklist**: the description is built as Atlassian Document Format with a `taskList` node, which renders as an interactive checklist on most Jira Cloud sites. If your instance rejects it, edit `draftToAdf` in `src/lib/adf.ts` to use a `bulletList` with `"[ ] "`-prefixed text instead.
 - **Issue type names** are matched by exact string (`Task`/`Story`/`Bug`) — rename them in `src/lib/types.ts` and the `TicketForm` component if your project uses different names.
 - Single-team internal tool: no user accounts/auth layer, no CI, no automated tests — deliberately out of scope for this size of project.
-- `npm audit` flags high-severity issues in Prisma's *MySQL* driver dependency chain — this project only uses the SQLite driver, so it's not exploitable here; it's a known upstream advisory in an unused code path.
+- `npm audit` flags high-severity issues in Prisma's *MySQL* driver dependency chain — this project doesn't use MySQL at all (Postgres only), so it's not exploitable here; it's a known upstream advisory in an unused code path pulled in by the Prisma CLI's own tooling.
 - **Gemini free-tier rate limits**: `gemini-flash-lite-latest` is used specifically because the plain `gemini-flash-latest`/`gemini-*-flash` models are capped at just 5 requests/minute per project on the free tier, shared across everyone using the same `GEMINI_API_KEY`. `generateTicketDraft` (`src/lib/llm.ts`) retries transient `429`/`503` responses a couple of times before failing, but a sustained burst of drafts from multiple people at once can still hit the wall — if that happens in practice, either add a short client-side debounce or move to a paid Gemini tier / Claude API.
+- **Pooled vs. direct DB connections**: `DATABASE_URL` is used for both the running app and `prisma migrate`/`generate`. A pooled (PgBouncer) connection is required for the app in serverless — a fresh unpooled connection per invocation would exhaust the database's connection limit under load. If a future migration ever fails against the pooled connection (rare, but possible with some DDL), temporarily point `DATABASE_URL` at the provider's non-pooling connection string just for that one `prisma migrate deploy` run.
 
-## Deploying beyond localhost
+## Deploying to Vercel
 
-SQLite is a single file on disk — it works well on a single persistent server/VM/container, but **not** on typical serverless hosts (e.g. Vercel) where the filesystem isn't persistent across invocations. For serverless deployment, swap the datasource for a hosted SQLite-compatible option (e.g. Turso/LibSQL via `@prisma/adapter-libsql`, see `.agents/skills/prisma-database-setup/references/sqlite.md`) or a managed Postgres, and update `prisma7.config.ts` and `src/lib/prisma.ts` accordingly.
+1. Push the repo to GitHub (already done if you're reading this from there) and import it into Vercel.
+2. In the Vercel project, add a Postgres database (Storage tab → Create Database) — this auto-injects `POSTGRES_PRISMA_URL` and related env vars into the project.
+3. In Project Settings → Environment Variables, set `DATABASE_URL` to the value of the auto-injected pooled connection string (`POSTGRES_PRISMA_URL`), plus all the `JIRA_*`, `GEMINI_API_KEY`, and `DAILY_TICKET_LIMIT` variables from `.env.example`.
+4. Run `npx prisma migrate deploy` once against that database (from your machine, with `DATABASE_URL` in your local `.env` pointed at the same Postgres instance) to create the `Ticket` table before the first deploy.
+5. Deploy. The `postinstall` script (`prisma generate`) regenerates the Prisma Client automatically during Vercel's build — no manual step needed there.

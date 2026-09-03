@@ -1,14 +1,15 @@
 import "server-only";
 import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { env } from "@/lib/env";
 
-// Reuse a single PrismaClient across hot reloads in dev to avoid exhausting
-// the SQLite connection/file handle on every module reload.
+// Reuse a single PrismaClient (and its connection pool) across hot reloads
+// in dev, and across invocations of the same warm serverless instance in
+// production, instead of opening a fresh pool on every module load.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createPrismaClient() {
-  const adapter = new PrismaBetterSqlite3({ url: env.DATABASE_URL });
+  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
   return new PrismaClient({ adapter });
 }
 
