@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// status is a plain String ("PENDING" | "CREATED" | "FAILED"), validated in
+// TypeScript — SQLite has no native enum support.
+model Ticket {
+  id                String   @id @default(cuid())
+  status            String   @default("PENDING")
+  jiraKey           String?  @unique
+  jiraUrl           String?
+  title             String
+  issueType         String
+  assigneeAccountId String?
+  assigneeName      String?
+  startDate         String?
+  dueDate           String?
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+
+  @@index([createdAt])
+}
