@@ -16,23 +16,23 @@ export function SuccessCard({
   onReset: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 rounded-xl border bg-card px-6 py-12 text-center shadow-sm">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-600/10">
-        <Check className="h-6 w-6 text-green-600" strokeWidth={2.5} />
+    <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card px-6 py-12 text-center shadow-card">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success-bg">
+        <Check className="h-6 w-6 text-success" strokeWidth={2.5} />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">
+        <p className="text-[15px] font-medium text-foreground">
           Ticket{" "}
-          <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm font-semibold">
+          <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[13px] font-semibold">
             {jiraKey}
           </span>{" "}
           created in the active sprint
         </p>
-        <p className="text-sm text-muted-foreground">You can find it in Jira now.</p>
+        <p className="text-[13px] text-muted-foreground">You can find it in Jira now.</p>
       </div>
 
       {hasAttachments && (
-        <div className="text-sm">
+        <div className="text-[13px]">
           {!attachmentResult ? (
             <p className="flex items-center gap-1.5 text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading attachments…
@@ -42,13 +42,13 @@ export function SuccessCard({
               {attachmentResult.uploaded.length} attachment{attachmentResult.uploaded.length > 1 ? "s" : ""} uploaded.
             </p>
           ) : (
-            <div className="flex flex-col items-center gap-1 text-amber-600 dark:text-amber-400">
+            <div className="flex flex-col items-center gap-1 text-warning">
               <p className="flex items-center gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {attachmentResult.uploaded.length} of{" "}
                 {attachmentResult.uploaded.length + attachmentResult.failed.length} attachments uploaded
               </p>
-              <ul className="text-xs">
+              <ul className="text-[12px]">
                 {attachmentResult.failed.map((f) => (
                   <li key={f.filename}>
                     {f.filename}: {f.error}

@@ -1,29 +1,22 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Check, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TicketForm } from "@/components/TicketForm";
 import { DraftEditor } from "@/components/DraftEditor";
-import { QuotaIndicator } from "@/components/QuotaIndicator";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { SuccessCard } from "@/components/SuccessCard";
 import { LivePreviewPanel } from "@/components/LivePreviewPanel";
 import { AttachmentPicker } from "@/components/AttachmentPicker";
 import { DuplicateWarning } from "@/components/DuplicateWarning";
 import { Label } from "@/components/ui/label";
+import { useQuota } from "@/components/QuotaProvider";
+import { cn } from "@/lib/utils";
 import type {
   FailedAttachment,
   IssueType,
-  QuotaStatus,
   SimilarIssue,
   TicketDraft,
   UploadedAttachment,
@@ -34,14 +27,6 @@ type Assignee = { accountId: string; displayName: string };
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function StepNumber({ n }: { n: number }) {
-  return (
-    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-      {n}
-    </span>
-  );
 }
 
 const DRAFT_STORAGE_KEY = "jira-ticket-creator:draft-v1";
@@ -66,6 +51,8 @@ function readPersistedDraft(): PersistedDraft | null {
 }
 
 export default function Home() {
+  const { quota, setQuota, refreshQuota } = useQuota();
+
   // Read once, synchronously, on first render — restoring an in-progress
   // draft this way (rather than in an effect) avoids a flash of empty state.
   const [initialDraft] = useState(readPersistedDraft);
@@ -80,37 +67,13 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [stage, setStage] = useState<Stage>(initialDraft?.draft ? "drafted" : "idle");
   const [error, setError] = useState<string | null>(null);
-  const [quota, setQuota] = useState<QuotaStatus | null>(null);
   const [created, setCreated] = useState<{ jiraKey: string; jiraUrl: string } | null>(null);
   const [attachmentResult, setAttachmentResult] = useState<{
     uploaded: UploadedAttachment[];
     failed: FailedAttachment[];
   } | null>(null);
   const [duplicates, setDuplicates] = useState<SimilarIssue[]>([]);
-
-  async function refreshQuota() {
-    try {
-      const res = await fetch("/api/tickets/quota");
-      if (res.ok) setQuota(await res.json());
-    } catch {
-      // Quota display is best-effort; the server still enforces the limit.
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/tickets/quota")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data) setQuota(data);
-      })
-      .catch(() => {
-        // Quota display is best-effort; the server still enforces the limit.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [contextExpanded, setContextExpanded] = useState(!initialDraft?.draft);
 
   // Persist in-progress work so a refresh doesn't lose it (restore happens
   // synchronously above, via the initialDraft lazy state initializer).
@@ -148,6 +111,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error ?? "Failed to generate a draft.");
       setDraft(data.draft);
       setStage("drafted");
+      setContextExpanded(false);
 
       // Best-effort, non-blocking — the draft is already shown either way.
       fetch("/api/tickets/duplicates", {
@@ -225,6 +189,7 @@ export default function Home() {
     setDuplicates([]);
     setError(null);
     setStage("idle");
+    setContextExpanded(true);
     clearPersistedDraft();
     refreshQuota();
   }
@@ -232,19 +197,20 @@ export default function Home() {
   const quotaExhausted = quota !== null && quota.remaining === 0;
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-muted/40">
-      <header className="sticky top-0 z-10 border-b bg-background/85 backdrop-blur supports-backdrop-filter:bg-background/60">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3.5">
-          <div>
-            <h1 className="text-sm font-semibold leading-tight">Create Ticket</h1>
-            <p className="text-xs text-muted-foreground">AI-drafted tickets, created into the active sprint</p>
-          </div>
-          <QuotaIndicator quota={quota} />
+    <div className="flex min-h-full flex-1 flex-col bg-background">
+      <header className="sticky top-0 z-10 border-b border-border-subtle bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
+        <div className="mx-auto w-full max-w-7xl px-7 py-4">
+          <h1 className="text-[20px] font-semibold leading-tight text-foreground">Create Ticket</h1>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">Turn context into a structured Jira ticket.</p>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-        {error && <ErrorBanner message={error} />}
+      <main className="mx-auto w-full max-w-7xl flex-1 px-7 py-6">
+        {error && (
+          <div className="mb-5">
+            <ErrorBanner message={error} />
+          </div>
+        )}
 
         {stage === "success" && created ? (
           <div className="mx-auto max-w-2xl">
@@ -257,93 +223,133 @@ export default function Home() {
             />
           </div>
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[1fr_360px] lg:items-start">
-            <div className="flex flex-col gap-5">
-              <Card className="shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <StepNumber n={1} />
-                    Describe the context
-                  </CardTitle>
-                  <CardDescription className="pl-8">
-                    Explain what you need in plain words — the AI will suggest the ticket details.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <TicketForm
-                    context={context}
-                    issueType={issueType}
-                    isGenerating={stage === "drafting"}
-                    disabled={stage === "creating"}
-                    onContextChange={setContext}
-                    onIssueTypeChange={setIssueType}
-                    onGenerate={handleGenerate}
-                  />
-                </CardContent>
-              </Card>
+          <div className="grid min-w-0 gap-5 min-[900px]:grid-cols-[1fr_300px] min-[900px]:items-start min-[1200px]:grid-cols-[1fr_360px]">
+            <div className="min-w-0 rounded-xl border border-border bg-card shadow-card">
+              <div className="p-6">
+                {/* Step 1 — collapses to a compact summary once a draft exists */}
+                {draft && !contextExpanded ? (
+                  <div className="flex items-center gap-3">
+                    {stage === "drafting" ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                    ) : (
+                      <Check className="h-4 w-4 shrink-0 text-success" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setContextExpanded(true)}
+                      className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:text-primary"
+                      title="Edit context"
+                    >
+                      {context}
+                    </button>
+                    <Badge variant="outline" className="shrink-0 rounded-md text-[11px] font-medium">
+                      {issueType}
+                    </Badge>
+                    <button
+                      type="button"
+                      onClick={handleGenerate}
+                      disabled={stage === "drafting"}
+                      className="flex shrink-0 items-center gap-1.5 text-[13px] font-medium text-primary hover:underline disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("h-3 w-3", stage === "drafting" && "animate-spin")} />
+                      Regenerate
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                        1
+                      </span>
+                      <h2 className="text-[16px] font-semibold text-foreground">Describe your ticket</h2>
+                    </div>
+                    <p className="mt-1 pl-7 text-[13px] text-muted-foreground">
+                      Give the AI enough context to generate a useful ticket.
+                    </p>
+                    <div className="mt-4">
+                      <TicketForm
+                        context={context}
+                        issueType={issueType}
+                        isGenerating={stage === "drafting"}
+                        disabled={stage === "creating"}
+                        onContextChange={setContext}
+                        onIssueTypeChange={setIssueType}
+                        onGenerate={handleGenerate}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {draft && (
+                  <>
+                    <div className="my-6 border-t border-border-subtle" />
+
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                        2
+                      </span>
+                      <h2 className="text-[16px] font-semibold text-foreground">Review ticket</h2>
+                    </div>
+                    <p className="mt-1 pl-7 text-[13px] text-muted-foreground">
+                      Edit anything before creating the ticket in Jira.
+                    </p>
+
+                    <div className="mt-4 space-y-5 pl-7">
+                      <DuplicateWarning matches={duplicates} />
+
+                      <DraftEditor
+                        draft={draft}
+                        onChange={setDraft}
+                        issueType={issueType}
+                        assignee={assignee}
+                        onAssigneeChange={setAssignee}
+                        priority={priority}
+                        onPriorityChange={setPriority}
+                        startDate={startDate}
+                        dueDate={dueDate}
+                        onDueDateChange={setDueDate}
+                      />
+
+                      <div className="space-y-1.5">
+                        <Label className="text-[13px] font-medium">Attachments (optional)</Label>
+                        <AttachmentPicker files={files} onChange={setFiles} />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
               {draft && (
-                <Card className="shadow-sm">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <StepNumber n={2} />
-                        Review &amp; edit
-                      </CardTitle>
-                      <button
-                        type="button"
-                        onClick={handleGenerate}
-                        disabled={stage === "drafting"}
-                        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline disabled:opacity-50"
-                      >
-                        <RefreshCw className={`h-3 w-3 ${stage === "drafting" ? "animate-spin" : ""}`} />
-                        Regenerate
-                      </button>
-                    </div>
-                    <CardDescription className="pl-8">
-                      Make any changes before creating the ticket in Jira.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-5">
-                    <DuplicateWarning matches={duplicates} />
-
-                    <DraftEditor
-                      draft={draft}
-                      onChange={setDraft}
-                      issueType={issueType}
-                      assignee={assignee}
-                      onAssigneeChange={setAssignee}
-                      priority={priority}
-                      onPriorityChange={setPriority}
-                      startDate={startDate}
-                      dueDate={dueDate}
-                      onDueDateChange={setDueDate}
-                    />
-
-                    <div className="space-y-1.5">
-                      <Label>Attachments (optional)</Label>
-                      <AttachmentPicker files={files} onChange={setFiles} />
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 border-t pt-4">
-                      {quotaExhausted ? (
-                        <p className="text-sm text-muted-foreground">
-                          Daily limit reached — try again after the reset time above.
-                        </p>
+                <div className="flex items-center justify-between gap-4 border-t border-border-subtle px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    disabled={stage === "creating"}
+                    className="text-[13px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    Discard changes
+                  </button>
+                  <div className="flex items-center gap-3">
+                    {quotaExhausted && (
+                      <p className="text-[13px] text-muted-foreground">Daily limit reached</p>
+                    )}
+                    <Button
+                      onClick={handleCreate}
+                      disabled={stage === "creating" || quotaExhausted}
+                      className="gap-1.5"
+                    >
+                      {stage === "creating" ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" /> Creating…
+                        </>
                       ) : (
-                        <span />
+                        <>
+                          Create in Jira <ChevronRight className="h-4 w-4" />
+                        </>
                       )}
-                      <Button
-                        onClick={handleCreate}
-                        disabled={stage === "creating" || quotaExhausted}
-                        className="gap-2"
-                      >
-                        {stage === "creating" && <Loader2 className="h-4 w-4 animate-spin" />}
-                        {stage === "creating" ? "Creating…" : "Create Ticket"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
 

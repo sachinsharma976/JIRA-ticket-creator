@@ -43,7 +43,9 @@ export function DraftEditor({
   return (
     <div className="space-y-5">
       <div className="space-y-1.5">
-        <Label htmlFor="draft-title">Title</Label>
+        <Label htmlFor="draft-title" className="text-[13px] font-medium">
+          Title
+        </Label>
         <Input
           id="draft-title"
           value={draft.title}
@@ -52,37 +54,30 @@ export function DraftEditor({
         />
       </div>
 
-      <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Assignee</Label>
+          <Label className="text-[13px] font-medium">Assignee</Label>
           <AssigneeCombobox value={assignee} onChange={onAssigneeChange} />
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Priority</Label>
+          <Label className="text-[13px] font-medium">Priority</Label>
           <PrioritySelect issueType={issueType} value={priority} onChange={onPriorityChange} />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="draft-start-date" className="text-xs text-muted-foreground">
+          <Label htmlFor="draft-start-date" className="text-[13px] font-medium">
             Start date
           </Label>
-          <Input
-            id="draft-start-date"
-            className="bg-background"
-            value={formatDisplayDate(startDate)}
-            disabled
-            readOnly
-          />
+          <Input id="draft-start-date" value={formatDisplayDate(startDate)} disabled readOnly />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="draft-due-date" className="text-xs text-muted-foreground">
+          <Label htmlFor="draft-due-date" className="text-[13px] font-medium">
             Due date
           </Label>
           <Input
             id="draft-due-date"
-            className="bg-background"
             type="date"
             min={startDate}
             value={dueDate}
@@ -91,34 +86,36 @@ export function DraftEditor({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-1">
-        <div className="space-y-1.5">
-          <Label htmlFor="draft-problem">Problem</Label>
-          <Textarea
-            id="draft-problem"
-            rows={3}
-            value={draft.description.problem}
-            onChange={(e) =>
-              onChange({ ...draft, description: { ...draft.description, problem: e.target.value } })
-            }
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="draft-scope">Scope</Label>
-          <Textarea
-            id="draft-scope"
-            rows={3}
-            value={draft.description.scope}
-            onChange={(e) =>
-              onChange({ ...draft, description: { ...draft.description, scope: e.target.value } })
-            }
-          />
-        </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="draft-problem" className="text-[13px] font-medium">
+          Problem
+        </Label>
+        <Textarea
+          id="draft-problem"
+          rows={3}
+          value={draft.description.problem}
+          onChange={(e) =>
+            onChange({ ...draft, description: { ...draft.description, problem: e.target.value } })
+          }
+        />
       </div>
 
       <div className="space-y-1.5">
-        <Label>Acceptance criteria</Label>
+        <Label htmlFor="draft-scope" className="text-[13px] font-medium">
+          Scope
+        </Label>
+        <Textarea
+          id="draft-scope"
+          rows={3}
+          value={draft.description.scope}
+          onChange={(e) =>
+            onChange({ ...draft, description: { ...draft.description, scope: e.target.value } })
+          }
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[13px] font-medium">Acceptance criteria</Label>
         <AcceptanceCriteriaList
           items={draft.acceptanceCriteria}
           onChange={(acceptanceCriteria) => onChange({ ...draft, acceptanceCriteria })}
