@@ -28,6 +28,7 @@ export const createTicketSchema = ticketDraftSchema.extend({
   issueType: issueTypeEnum,
   assigneeAccountId: z.string().min(1).optional(),
   assigneeName: z.string().min(1).optional(),
+  priority: z.string().min(1).optional(),
   dueDate: isoDate.optional(),
 });
 export type CreateTicketRequest = z.infer<typeof createTicketSchema>;
@@ -62,4 +63,36 @@ export interface UploadedAttachment {
 export interface FailedAttachment {
   filename: string;
   error: string;
+}
+
+export interface JiraPriority {
+  id: string;
+  name: string;
+}
+
+export interface SimilarIssue {
+  key: string;
+  summary: string;
+  status: string;
+  url: string;
+}
+
+export interface IssueStatus {
+  name: string;
+  category: "new" | "indeterminate" | "done" | "unknown";
+}
+
+export interface TicketHistoryItem {
+  id: string;
+  status: string;
+  jiraKey: string | null;
+  jiraUrl: string | null;
+  title: string;
+  issueType: string;
+  assigneeName: string | null;
+  priority: string | null;
+  dueDate: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  liveStatus: IssueStatus | null;
 }

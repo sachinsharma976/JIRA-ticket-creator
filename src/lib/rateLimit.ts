@@ -45,6 +45,7 @@ export async function reserveTicketSlot(data: {
   issueType: IssueType;
   assigneeAccountId?: string;
   assigneeName?: string;
+  priority?: string;
   dueDate?: string;
   createdBy?: string;
 }): Promise<Ticket> {
@@ -68,6 +69,7 @@ export async function reserveTicketSlot(data: {
           issueType: data.issueType,
           assigneeAccountId: data.assigneeAccountId,
           assigneeName: data.assigneeName,
+          priority: data.priority,
           dueDate: data.dueDate,
           createdBy: data.createdBy,
         },

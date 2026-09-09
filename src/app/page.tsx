@@ -2,9 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, Ticket as TicketIcon } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -19,8 +18,16 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { SuccessCard } from "@/components/SuccessCard";
 import { LivePreviewPanel } from "@/components/LivePreviewPanel";
 import { AttachmentPicker } from "@/components/AttachmentPicker";
+import { DuplicateWarning } from "@/components/DuplicateWarning";
 import { Label } from "@/components/ui/label";
-import type { FailedAttachment, IssueType, QuotaStatus, TicketDraft, UploadedAttachment } from "@/lib/types";
+import type {
+  FailedAttachment,
+  IssueType,
+  QuotaStatus,
+  SimilarIssue,
+  TicketDraft,
+  UploadedAttachment,
+} from "@/lib/types";
 
 type Stage = "idle" | "drafting" | "drafted" | "creating" | "success";
 type Assignee = { accountId: string; displayName: string };
@@ -37,15 +44,41 @@ function StepNumber({ n }: { n: number }) {
   );
 }
 
+const DRAFT_STORAGE_KEY = "jira-ticket-creator:draft-v1";
+
+interface PersistedDraft {
+  context: string;
+  issueType: IssueType;
+  draft: TicketDraft | null;
+  assignee: Assignee | null;
+  priority: string;
+  dueDate: string;
+}
+
+function readPersistedDraft(): PersistedDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as PersistedDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
-  const [context, setContext] = useState("");
-  const [issueType, setIssueType] = useState<IssueType>("Task");
-  const [draft, setDraft] = useState<TicketDraft | null>(null);
-  const [assignee, setAssignee] = useState<Assignee | null>(null);
+  // Read once, synchronously, on first render — restoring an in-progress
+  // draft this way (rather than in an effect) avoids a flash of empty state.
+  const [initialDraft] = useState(readPersistedDraft);
+
+  const [context, setContext] = useState(initialDraft?.context ?? "");
+  const [issueType, setIssueType] = useState<IssueType>(initialDraft?.issueType ?? "Task");
+  const [draft, setDraft] = useState<TicketDraft | null>(initialDraft?.draft ?? null);
+  const [assignee, setAssignee] = useState<Assignee | null>(initialDraft?.assignee ?? null);
+  const [priority, setPriority] = useState(initialDraft?.priority ?? "");
   const [startDate] = useState(todayIso);
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(initialDraft?.dueDate ?? "");
   const [files, setFiles] = useState<File[]>([]);
-  const [stage, setStage] = useState<Stage>("idle");
+  const [stage, setStage] = useState<Stage>(initialDraft?.draft ? "drafted" : "idle");
   const [error, setError] = useState<string | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
   const [created, setCreated] = useState<{ jiraKey: string; jiraUrl: string } | null>(null);
@@ -53,6 +86,7 @@ export default function Home() {
     uploaded: UploadedAttachment[];
     failed: FailedAttachment[];
   } | null>(null);
+  const [duplicates, setDuplicates] = useState<SimilarIssue[]>([]);
 
   async function refreshQuota() {
     try {
@@ -78,8 +112,31 @@ export default function Home() {
     };
   }, []);
 
+  // Persist in-progress work so a refresh doesn't lose it (restore happens
+  // synchronously above, via the initialDraft lazy state initializer).
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      try {
+        const toSave: PersistedDraft = { context, issueType, draft, assignee, priority, dueDate };
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(toSave));
+      } catch {
+        // Best-effort — e.g. private browsing can block storage.
+      }
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [context, issueType, draft, assignee, priority, dueDate]);
+
+  function clearPersistedDraft() {
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {
+      // Ignore.
+    }
+  }
+
   async function handleGenerate() {
     setError(null);
+    setDuplicates([]);
     setStage("drafting");
     try {
       const res = await fetch("/api/tickets/draft", {
@@ -91,6 +148,16 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error ?? "Failed to generate a draft.");
       setDraft(data.draft);
       setStage("drafted");
+
+      // Best-effort, non-blocking — the draft is already shown either way.
+      fetch("/api/tickets/duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: data.draft.title }),
+      })
+        .then((r) => (r.ok ? r.json() : { matches: [] }))
+        .then((d) => setDuplicates(d.matches ?? []))
+        .catch(() => setDuplicates([]));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate a draft.");
       setStage("idle");
@@ -110,6 +177,7 @@ export default function Home() {
           issueType,
           assigneeAccountId: assignee?.accountId,
           assigneeName: assignee?.displayName,
+          priority: priority || undefined,
           dueDate: dueDate || undefined,
         }),
       });
@@ -121,6 +189,7 @@ export default function Home() {
       setQuota(data.quota);
       setCreated({ jiraKey: data.jiraKey, jiraUrl: data.jiraUrl });
       setStage("success");
+      clearPersistedDraft();
 
       // Attachments require the issue to exist first, so this is a
       // best-effort follow-up — a failed upload doesn't undo the ticket.
@@ -139,7 +208,6 @@ export default function Home() {
         }
       }
     } catch (e) {
-          console.log("🚀 ~ handleCreate ~ e:", e)
       setError(e instanceof Error ? e.message : "Failed to create the ticket.");
       setStage("drafted");
     }
@@ -149,12 +217,15 @@ export default function Home() {
     setContext("");
     setDraft(null);
     setAssignee(null);
+    setPriority("");
     setDueDate("");
     setFiles([]);
     setCreated(null);
     setAttachmentResult(null);
+    setDuplicates([]);
     setError(null);
     setStage("idle");
+    clearPersistedDraft();
     refreshQuota();
   }
 
@@ -164,19 +235,9 @@ export default function Home() {
     <div className="flex min-h-full flex-1 flex-col bg-muted/40">
       <header className="sticky top-0 z-10 border-b bg-background/85 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3.5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <TicketIcon className="h-4.5 w-4.5" />
-            </div>
-            <div className="flex items-center gap-2">
-              <div>
-                <h1 className="text-sm font-semibold leading-tight">Jira Ticket Creator</h1>
-                <p className="text-xs text-muted-foreground">AI-drafted tickets, created into the active sprint</p>
-              </div>
-              <Badge variant="secondary" className="text-[0.65rem]">
-                Beta
-              </Badge>
-            </div>
+          <div>
+            <h1 className="text-sm font-semibold leading-tight">Create Ticket</h1>
+            <p className="text-xs text-muted-foreground">AI-drafted tickets, created into the active sprint</p>
           </div>
           <QuotaIndicator quota={quota} />
         </div>
@@ -244,11 +305,16 @@ export default function Home() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-5">
+                    <DuplicateWarning matches={duplicates} />
+
                     <DraftEditor
                       draft={draft}
                       onChange={setDraft}
+                      issueType={issueType}
                       assignee={assignee}
                       onAssigneeChange={setAssignee}
+                      priority={priority}
+                      onPriorityChange={setPriority}
                       startDate={startDate}
                       dueDate={dueDate}
                       onDueDateChange={setDueDate}

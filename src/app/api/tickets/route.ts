@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       issueType: draft.issueType,
       assigneeAccountId: draft.assigneeAccountId,
       assigneeName: draft.assigneeName,
+      priority: draft.priority,
       dueDate: draft.dueDate,
     });
   } catch (error) {
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
   try {
     const { jiraKey, jiraUrl, startDate } = await createTicketInActiveSprint(draft, draft.issueType, {
       assigneeAccountId: draft.assigneeAccountId,
+      priority: draft.priority,
       dueDate: draft.dueDate,
     });
     await markTicketCreated(reservation.id, jiraKey, jiraUrl, startDate);

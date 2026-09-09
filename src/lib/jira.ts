@@ -1,7 +1,7 @@
 import "server-only";
 import { env } from "@/lib/env";
 import { draftToAdf } from "@/lib/adf";
-import type { AssignableUser, IssueType, TicketDraft } from "@/lib/types";
+import type { AssignableUser, IssueStatus, IssueType, JiraPriority, SimilarIssue, TicketDraft } from "@/lib/types";
 
 export class JiraError extends Error {
   constructor(message: string, readonly status?: number, readonly details?: unknown) {
@@ -88,6 +88,7 @@ export async function getAssignableUsers(query?: string): Promise<AssignableUser
 interface CreateMetaField {
   key: string;
   name: string;
+  allowedValues?: { id: string; name: string }[];
 }
 
 // Field keys for custom fields (like "Start date") are assigned per Jira
@@ -121,8 +122,15 @@ async function findFieldKeyByName(issueType: IssueType, fieldName: string): Prom
   return match?.key;
 }
 
+export async function getAllowedPriorities(issueType: IssueType): Promise<JiraPriority[]> {
+  const fields = await getCreateMetaFields(issueType);
+  const priorityField = Object.values(fields).find((f) => f.key === "priority");
+  return (priorityField?.allowedValues ?? []).map((v) => ({ id: v.id, name: v.name }));
+}
+
 interface CreateIssueOptions {
   assigneeAccountId?: string;
+  priority?: string;
   startDate: string;
   dueDate?: string;
 }
@@ -141,6 +149,9 @@ async function createIssue(
 
   if (options.assigneeAccountId) {
     fields.assignee = { id: options.assigneeAccountId };
+  }
+  if (options.priority) {
+    fields.priority = { name: options.priority };
   }
   if (options.dueDate) {
     fields.duedate = options.dueDate;
@@ -193,7 +204,7 @@ function todayUtc(): string {
 export async function createTicketInActiveSprint(
   draft: TicketDraft,
   issueType: IssueType,
-  options: { assigneeAccountId?: string; dueDate?: string } = {},
+  options: { assigneeAccountId?: string; priority?: string; dueDate?: string } = {},
 ): Promise<{ jiraKey: string; jiraUrl: string; startDate: string }> {
   // Resolve the sprint first so we never create an orphaned backlog issue
   // when there's no active sprint to put it in.
@@ -202,6 +213,7 @@ export async function createTicketInActiveSprint(
 
   const issue = await createIssue(draft, issueType, {
     assigneeAccountId: options.assigneeAccountId,
+    priority: options.priority,
     dueDate: options.dueDate,
     startDate,
   });
@@ -212,4 +224,48 @@ export async function createTicketInActiveSprint(
     jiraUrl: `${env.JIRA_BASE_URL}/browse/${issue.key}`,
     startDate,
   };
+}
+
+function escapeJqlString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+interface JqlIssue {
+  key: string;
+  fields: { summary: string; status: { name: string; statusCategory: { key: string } } };
+}
+
+export async function searchSimilarIssues(title: string, limit = 5): Promise<SimilarIssue[]> {
+  const jql = `project = ${env.JIRA_PROJECT_KEY} AND text ~ "${escapeJqlString(title)}" ORDER BY updated DESC`;
+  const params = new URLSearchParams({ jql, maxResults: String(limit), fields: "summary,status" });
+
+  const data = (await jiraFetch(`/rest/api/3/search/jql?${params.toString()}`)) as { issues?: JqlIssue[] };
+
+  return (data.issues ?? []).map((issue) => ({
+    key: issue.key,
+    summary: issue.fields.summary,
+    status: issue.fields.status.name,
+    url: `${env.JIRA_BASE_URL}/browse/${issue.key}`,
+  }));
+}
+
+const KNOWN_STATUS_CATEGORIES = new Set(["new", "indeterminate", "done"]);
+
+export async function getIssueStatuses(keys: string[]): Promise<Record<string, IssueStatus>> {
+  if (keys.length === 0) return {};
+
+  const jql = `key in (${keys.join(",")})`;
+  const params = new URLSearchParams({ jql, fields: "status", maxResults: String(keys.length) });
+
+  const data = (await jiraFetch(`/rest/api/3/search/jql?${params.toString()}`)) as { issues?: JqlIssue[] };
+
+  const result: Record<string, IssueStatus> = {};
+  for (const issue of data.issues ?? []) {
+    const categoryKey = issue.fields.status.statusCategory.key;
+    result[issue.key] = {
+      name: issue.fields.status.name,
+      category: KNOWN_STATUS_CATEGORIES.has(categoryKey) ? (categoryKey as IssueStatus["category"]) : "unknown",
+    };
+  }
+  return result;
 }

@@ -5,7 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AcceptanceCriteriaList } from "@/components/AcceptanceCriteriaList";
 import { AssigneeCombobox } from "@/components/AssigneeCombobox";
-import type { TicketDraft } from "@/lib/types";
+import { PrioritySelect } from "@/components/PrioritySelect";
+import type { IssueType, TicketDraft } from "@/lib/types";
 
 function formatDisplayDate(isoDate: string) {
   return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString(undefined, {
@@ -19,16 +20,22 @@ function formatDisplayDate(isoDate: string) {
 export function DraftEditor({
   draft,
   onChange,
+  issueType,
   assignee,
   onAssigneeChange,
+  priority,
+  onPriorityChange,
   startDate,
   dueDate,
   onDueDateChange,
 }: {
   draft: TicketDraft;
   onChange: (draft: TicketDraft) => void;
+  issueType: IssueType;
   assignee: { accountId: string; displayName: string } | null;
   onAssigneeChange: (user: { accountId: string; displayName: string } | null) => void;
+  priority: string;
+  onPriorityChange: (priority: string) => void;
   startDate: string;
   dueDate: string;
   onDueDateChange: (date: string) => void;
@@ -45,10 +52,15 @@ export function DraftEditor({
         />
       </div>
 
-      <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-3">
+      <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Assignee</Label>
           <AssigneeCombobox value={assignee} onChange={onAssigneeChange} />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Priority</Label>
+          <PrioritySelect issueType={issueType} value={priority} onChange={onPriorityChange} />
         </div>
 
         <div className="space-y-1.5">

@@ -20,6 +20,7 @@ model Ticket {
   issueType         String
   assigneeAccountId String?
   assigneeName      String?
+  priority          String?
   startDate         String?
   dueDate           String?
   errorMessage      String?
