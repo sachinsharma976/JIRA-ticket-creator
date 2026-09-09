@@ -1,13 +1,18 @@
-import { Check, ExternalLink } from "lucide-react";
+import { Check, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import type { FailedAttachment, UploadedAttachment } from "@/lib/types";
 
 export function SuccessCard({
   jiraKey,
   jiraUrl,
+  hasAttachments,
+  attachmentResult,
   onReset,
 }: {
   jiraKey: string;
   jiraUrl: string;
+  hasAttachments: boolean;
+  attachmentResult: { uploaded: UploadedAttachment[]; failed: FailedAttachment[] } | null;
   onReset: () => void;
 }) {
   return (
@@ -25,6 +30,36 @@ export function SuccessCard({
         </p>
         <p className="text-sm text-muted-foreground">You can find it in Jira now.</p>
       </div>
+
+      {hasAttachments && (
+        <div className="text-sm">
+          {!attachmentResult ? (
+            <p className="flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading attachments…
+            </p>
+          ) : attachmentResult.failed.length === 0 ? (
+            <p className="text-muted-foreground">
+              {attachmentResult.uploaded.length} attachment{attachmentResult.uploaded.length > 1 ? "s" : ""} uploaded.
+            </p>
+          ) : (
+            <div className="flex flex-col items-center gap-1 text-amber-600 dark:text-amber-400">
+              <p className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {attachmentResult.uploaded.length} of{" "}
+                {attachmentResult.uploaded.length + attachmentResult.failed.length} attachments uploaded
+              </p>
+              <ul className="text-xs">
+                {attachmentResult.failed.map((f) => (
+                  <li key={f.filename}>
+                    {f.filename}: {f.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-2 pt-1">
         <a
           href={jiraUrl}

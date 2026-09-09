@@ -27,8 +27,15 @@ const responseSchema = {
     description: {
       type: Type.OBJECT,
       properties: {
-        problem: { type: Type.STRING, description: "The specific problem or gap being addressed." },
-        scope: { type: Type.STRING, description: "What is and isn't included in this ticket." },
+        problem: {
+          type: Type.STRING,
+          description: "The specific problem or gap being addressed, and why it matters.",
+        },
+        scope: {
+          type: Type.STRING,
+          description:
+            "The boundaries of this ticket: what is included and what is explicitly excluded. Must say something different from the problem field, not restate it. Include any URLs, demo links, or reference material from the context verbatim.",
+        },
       },
       required: ["problem", "scope"],
     },
@@ -46,8 +53,11 @@ Given free-form context from a teammate, produce a single structured ticket draf
 
 Rules:
 - Title: at most 100 characters, specific, no ticket-type prefixes like "[Bug]".
-- Description has two distinct parts: problem (what's wrong or missing, including why it matters) and scope (what this ticket does and does not cover).
-- Do not invent specifics (numbers, names, systems) that aren't implied by the given context.
+- Description has two distinct parts:
+  - problem: what's wrong or missing, and why it matters.
+  - scope: the boundaries of this specific ticket — what's included and what's explicitly excluded. This must add new information, not restate the problem in different words. If the context doesn't spell out boundaries, infer a sensible one (e.g. "Covers X. Does not cover Y.").
+- Preserve concrete details from the context exactly as given: URLs, demo links, file paths, ticket keys, specific names, and numbers. Never drop, summarize away, or paraphrase them — copy them verbatim into the description (scope is usually the right place for reference links).
+- Do not invent specifics (numbers, names, systems, URLs) that aren't present in or implied by the given context.
 - Acceptance criteria: 3 to 7 items, each a short, independently testable statement starting with a verb (e.g. "Display an error message when...").
 - Write for the issue type given (Task, Story, or Bug) — a Bug's acceptance criteria should describe the fixed/expected behavior.`;
 

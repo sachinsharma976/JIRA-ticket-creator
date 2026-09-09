@@ -15,6 +15,12 @@ import type { IssueType } from "@/lib/types";
 
 const ISSUE_TYPES: IssueType[] = ["Task", "Story", "Bug"];
 
+const EXAMPLES = [
+  "Checkout fails with a 500 error when a customer applies a promo code and their cart total is exactly $0.",
+  "Add a dark mode toggle to the dashboard settings page, remembered per user.",
+  "The monthly report export times out for accounts with more than 10,000 rows.",
+];
+
 export function TicketForm({
   context,
   issueType,
@@ -45,6 +51,22 @@ export function TicketForm({
         />
         <p className="text-right text-xs text-muted-foreground">{context.length}/8000 characters</p>
       </div>
+
+      {!context && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Try an example:</span>
+          {EXAMPLES.map((example, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onContextChange(example)}
+              className="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {example.slice(0, 32)}…
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-end justify-between gap-3">
         <div className="space-y-1.5">

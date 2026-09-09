@@ -44,3 +44,22 @@ export interface AssignableUser {
   displayName: string;
   avatarUrl?: string;
 }
+
+// Attachment limits, shared by the client (form validation/hints) and the
+// server (authoritative enforcement — never trust the client-side checks).
+export const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+export const MAX_ATTACHMENTS = 5;
+// Light safety net against uploading executables through this proxy — Jira
+// would just store them inertly, but there's no reason to allow it.
+export const BLOCKED_ATTACHMENT_EXTENSIONS = [
+  ".exe", ".bat", ".cmd", ".com", ".msi", ".sh", ".dll", ".scr", ".ps1",
+];
+
+export interface UploadedAttachment {
+  id: string;
+  filename: string;
+}
+export interface FailedAttachment {
+  filename: string;
+  error: string;
+}

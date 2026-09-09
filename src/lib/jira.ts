@@ -13,12 +13,16 @@ export class JiraError extends Error {
 const authHeader = `Basic ${Buffer.from(`${env.JIRA_EMAIL}:${env.JIRA_API_TOKEN}`).toString("base64")}`;
 
 async function jiraFetch(path: string, init: RequestInit = {}) {
+  // When the body is FormData, fetch must set its own multipart Content-Type
+  // (with the boundary) — setting it manually here would break the upload.
+  const isFormData = init.body instanceof FormData;
+
   const res = await fetch(`${env.JIRA_BASE_URL}${path}`, {
     ...init,
     headers: {
       Authorization: authHeader,
       Accept: "application/json",
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init.headers,
     },
   });
@@ -156,6 +160,23 @@ async function createIssue(
   })) as { key: string; id: string };
 
   return data;
+}
+
+export async function uploadAttachment(
+  issueKey: string,
+  file: File,
+): Promise<{ id: string; filename: string }> {
+  const body = new FormData();
+  body.append("file", file, file.name);
+
+  const data = (await jiraFetch(`/rest/api/3/issue/${issueKey}/attachments`, {
+    method: "POST",
+    // Required by Jira to bypass XSRF protection on this specific endpoint.
+    headers: { "X-Atlassian-Token": "no-check" },
+    body,
+  })) as { id: string; filename: string }[];
+
+  return data[0];
 }
 
 async function moveIssueToSprint(sprintId: number, issueKey: string): Promise<void> {

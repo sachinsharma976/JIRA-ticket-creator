@@ -51,27 +51,34 @@ export async function reserveTicketSlot(data: {
   const { start, end } = getTodayRangeUtc();
   const limit = env.DAILY_TICKET_LIMIT;
 
-  return prisma.$transaction(async (tx) => {
-    const used = await tx.ticket.count({
-      where: { status: { in: COUNTED_STATUSES }, createdAt: { gte: start, lt: end } },
-    });
+  return prisma.$transaction(
+    async (tx) => {
+      const used = await tx.ticket.count({
+        where: { status: { in: COUNTED_STATUSES }, createdAt: { gte: start, lt: end } },
+      });
 
-    if (used >= limit) {
-      throw new QuotaExceededError(used, limit);
-    }
+      if (used >= limit) {
+        throw new QuotaExceededError(used, limit);
+      }
 
-    return tx.ticket.create({
-      data: {
-        status: "PENDING",
-        title: data.title,
-        issueType: data.issueType,
-        assigneeAccountId: data.assigneeAccountId,
-        assigneeName: data.assigneeName,
-        dueDate: data.dueDate,
-        createdBy: data.createdBy,
-      },
-    });
-  });
+      return tx.ticket.create({
+        data: {
+          status: "PENDING",
+          title: data.title,
+          issueType: data.issueType,
+          assigneeAccountId: data.assigneeAccountId,
+          assigneeName: data.assigneeName,
+          dueDate: data.dueDate,
+          createdBy: data.createdBy,
+        },
+      });
+    },
+    // Prisma's default maxWait (~2s) is too tight for Prisma Postgres's
+    // direct (unpooled) connection, which can take longer than that just to
+    // establish a fresh connection under load — this was causing real
+    // "Unable to start a transaction in the given time" failures in prod use.
+    { maxWait: 10_000, timeout: 10_000 },
+  );
 }
 
 export async function markTicketCreated(
